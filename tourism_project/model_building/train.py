@@ -72,8 +72,6 @@ def train_and_log():
         mlflow.log_metric("test_recall", report["weighted avg"]["recall"])
         mlflow.log_metric("test_f1", report["weighted avg"]["f1-score"])
 
-        mlflow.sklearn.log_model(best_model, "model")
-
         print("Best parameters:", grid_search.best_params_)
         print(f"Test accuracy: {accuracy:.4f}")
         print(classification_report(ytest, ypred))
