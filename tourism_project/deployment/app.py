@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 
-MODEL_PATH = "best_model.joblib"
+MODEL_PATH = "tourism_project/deployment/best_model.joblib"
 
 @st.cache_resource
 def load_model():
