@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report, accuracy_score
 
+# Text columns need one-hot encoding; numeric columns need scaling
 CATEGORICAL_COLUMNS = [
     "TypeofContact", "Occupation", "Gender",
     "ProductPitched", "MaritalStatus", "Designation",
@@ -23,8 +24,10 @@ NUMERIC_COLUMNS = [
     "NumberOfChildrenVisiting", "MonthlyIncome",
 ]
 
+# Model is saved here so the "Commit Trained Model" workflow step can find it
 MODEL_OUTPUT_PATH = "tourism_project/deployment/best_model.joblib"
 
+# Small grid kept intentionally short so GridSearchCV runs quickly in CI
 PARAM_GRID = {
     "xgbclassifier__n_estimators": [100, 200],
     "xgbclassifier__max_depth": [3, 5],
@@ -34,12 +37,16 @@ PARAM_GRID = {
 def load_splits():
     Xtrain = pd.read_csv("Xtrain.csv")
     Xtest = pd.read_csv("Xtest.csv")
+    # .squeeze() converts the single-column CSV back into a Series,
+    # which is the format scikit-learn expects for a target vector
     ytrain = pd.read_csv("ytrain.csv").squeeze()
     ytest = pd.read_csv("ytest.csv").squeeze()
     return Xtrain, Xtest, ytrain, ytest
 
 def build_pipeline():
     preprocessor = make_column_transformer(
+        # handle_unknown="ignore" avoids crashing if test data has a
+        # category not seen during training
         (OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_COLUMNS),
         (StandardScaler(), NUMERIC_COLUMNS),
     )
@@ -48,6 +55,8 @@ def build_pipeline():
         eval_metric="logloss",
         random_state=42,
     )
+    # Bundling preprocessing + model together means the saved pipeline
+    # can accept raw input later with no manual encoding required
     return make_pipeline(preprocessor, model)
 
 def train_and_log():
@@ -55,18 +64,21 @@ def train_and_log():
     pipeline = build_pipeline()
 
     with mlflow.start_run():
+        # Cross-validated grid search over the defined hyperparameter grid
         grid_search = GridSearchCV(
             pipeline, PARAM_GRID, cv=3, scoring="accuracy", n_jobs=-1
         )
         grid_search.fit(Xtrain, ytrain)
 
         best_model = grid_search.best_estimator_
+        # Log the winning hyperparameters for experiment tracking
         mlflow.log_params(grid_search.best_params_)
 
         ypred = best_model.predict(Xtest)
         accuracy = accuracy_score(ytest, ypred)
         report = classification_report(ytest, ypred, output_dict=True)
 
+        # Log evaluation metrics alongside the parameters
         mlflow.log_metric("test_accuracy", accuracy)
         mlflow.log_metric("test_precision", report["weighted avg"]["precision"])
         mlflow.log_metric("test_recall", report["weighted avg"]["recall"])
@@ -76,6 +88,7 @@ def train_and_log():
         print(f"Test accuracy: {accuracy:.4f}")
         print(classification_report(ytest, ypred))
 
+        # Saving the model so the GitHub Actions workflow can commit it
         os.makedirs(os.path.dirname(MODEL_OUTPUT_PATH), exist_ok=True)
         joblib.dump(best_model, MODEL_OUTPUT_PATH)
         print(f"Model saved to {MODEL_OUTPUT_PATH}")
