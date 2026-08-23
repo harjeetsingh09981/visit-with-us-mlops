@@ -4,20 +4,24 @@ from sklearn.model_selection import train_test_split
 
 DATA_PATH = "tourism_project/data/tourism.csv"
 TARGET_COLUMN = "ProdTaken"
+# Index column and customer ID carry no predictive signal — drop before modeling
 COLUMNS_TO_DROP = ["Unnamed: 0", "CustomerID"]
 
 def prepare_data():
     df = pd.read_csv(DATA_PATH)
-
     df = df.drop(columns=[col for col in COLUMNS_TO_DROP if col in df.columns])
 
     X = df.drop(columns=[TARGET_COLUMN])
     y = df[TARGET_COLUMN]
 
+    # stratify=y keeps the same buy/no-buy ratio in train and test,
+    # since the target is imbalanced (~19% purchase rate)
     Xtrain, Xtest, ytrain, ytest = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
+    # Saving to the working directory — the workflow uploads these as
+    # the "data-splits" artifact for the next job to download
     Xtrain.to_csv("Xtrain.csv", index=False)
     Xtest.to_csv("Xtest.csv", index=False)
     ytrain.to_csv("ytrain.csv", index=False)
